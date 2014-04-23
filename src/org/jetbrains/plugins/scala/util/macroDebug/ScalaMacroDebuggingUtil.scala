@@ -22,7 +22,7 @@ object ScalaMacroDebuggingUtil {
   
   val MACRO_SIGN_PREFIX = "<[[macro:" //=\
   val needFixCarriageReturn = SystemInfo.isWindows
-  val isEnabled = System.getProperty(MACRO_DEBUG_ENABLE_PROPERTY) != null
+  val isEnabled = true // System.getProperty(MACRO_DEBUG_ENABLE_PROPERTY) != null
   
   private[this] val SOURCE_FILE_NAME = new FileAttribute("PreimageFileName", 1, false)
   private[this] val SYNTHETIC_SOURCE_ATTRIBUTE = new FileAttribute("SyntheticMacroCode", 1, false)
@@ -44,6 +44,57 @@ object ScalaMacroDebuggingUtil {
     dataStream close()
     
     UPDATE_QUEUE += file.getCanonicalPath
+  }
+
+  def loadCode1(file: PsiFile, force: Boolean = false): PsiFile = {
+    if (!isEnabled || file.getVirtualFile.isInstanceOf[LightVirtualFile]) return null
+
+    val canonicalPath = file.getVirtualFile.getCanonicalPath
+
+    def createFile(): PsiFile = {
+      val expanded =
+"""package MacroTest
+
+import Macros.Macros._
+
+object Runner {
+  def main(args: Array[String]) = {
+    println("Hello, World!")
+    println(5)
+  }
+
+  implicit def doSmth(num:String) = num.toInt
+}
+10,128,138"""
+
+      val lines = expanded split '\n'
+
+      val offsets = ListBuffer.empty[(Int, Int, Int)]
+      @inline def parse(s: String) = Integer parseInt s
+      lines.last match {
+        //match s with ///macro exansion - begin
+        //read until ///macro expansion - end
+        //calculate langth, start, end
+
+        case s =>
+          val nums = s split ","
+          if (nums.length == 3) {
+            offsets.append((parse(nums(0)), parse(nums(1)), parse(nums(2))))
+          }
+      }
+      SYNTHETIC_OFFSETS_MAP += (canonicalPath -> offsets.result())
+
+      val synFile = PsiFileFactory.getInstance(file.getManager.getProject).
+              createFileFromText("expanded_" + file.getName,
+                ScalaFileType.SCALA_FILE_TYPE, lines.dropRight(1).mkString("\n"), file.getModificationStamp, true).asInstanceOf[ScalaFile]
+
+      SOURCE_CACHE += (canonicalPath -> synFile)
+      PREIMAGE_CACHE += (synFile -> file)
+
+      synFile
+    }
+
+    if (force || UPDATE_QUEUE.remove(canonicalPath)) createFile() else SOURCE_CACHE get canonicalPath getOrElse createFile()
   }
 
   def loadCode(file: PsiFile, force: Boolean = false): PsiFile = {
@@ -103,7 +154,7 @@ object ScalaMacroDebuggingUtil {
   }
   
   def tryToLoad(file: PsiFile) = !file.getVirtualFile.isInstanceOf[LightVirtualFile] && 
-    (isLoaded(file) || loadCode(file, false) != null)
+    (isLoaded(file) || loadCode1(file, false) != null)
 
   def getOffsets(file: PsiFile) = SYNTHETIC_OFFSETS_MAP get file.getVirtualFile.getCanonicalPath
   

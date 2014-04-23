@@ -30,25 +30,24 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
     if (!ScalaMacroDebuggingUtil.isEnabled || elements.isEmpty) return
     val first = elements get 0
     val file = first.getContainingFile
-    
-    val synFile = file match {
-      case scalaFile: ScalaFile if ScalaMacroDebuggingUtil tryToLoad scalaFile => Some(scalaFile)
-      case _ => None
-    }
 
     import scala.collection.JavaConversions._
     val macrosFound = elements filter ScalaMacroDebuggingUtil.isMacroCall
     if (macrosFound.length == 0) return
-    
+
+    val synFile: Option[ScalaFile] = file match {
+      case scalaFile: ScalaFile if ScalaMacroDebuggingUtil tryToLoad scalaFile => Some(scalaFile)
+      case _ => None
+    }
+
     val nullOffsets: GenIterable[(Int, Int, Int)]  = Stream.iterate((-1,-1,-1))((t) => (t._1,t._2,t._3))
     val offsets: GenIterable[(Int, Int, Int)] = synFile map (ScalaMacroDebuggingUtil getOffsets _) map {
       case Some(o) if o.length == macrosFound.length => o
-      case None => nullOffsets 
-    } getOrElse nullOffsets 
-
+      case None => nullOffsets
+    } getOrElse nullOffsets
     
     (0 /: (macrosFound zip offsets)) {
-      case (offsetsSoFar, (macroCall, (length, start, end))) =>
+      case (offsetsSoFar: Int, (macroCall, (length, start, end))) =>
         val off = if (length <= 0) {
           -1
         } else {
@@ -64,16 +63,17 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
               if (off <= 0) {
                 errorMessage
               } else {
-                synFile map (ScalaMacroDebuggingUtil loadCode _) map {
+                val txt = synFile map (ScalaMacroDebuggingUtil loadCode1 _) map {
                   file => PsiDocumentManager getInstance file.getProject getDocument file
                 } map ( _ getText new TextRange(off, off + length) ) getOrElse errorMessage
+                txt
               }
             }
           },
           new GutterIconNavigationHandler[PsiElement] {
             def navigate(mouseEvent: MouseEvent, elt: PsiElement) {
               if (off <= 0) return 
-              var macroExpanded = ScalaMacroDebuggingUtil loadCode file findElementAt off
+              var macroExpanded = ScalaMacroDebuggingUtil loadCode1 file findElementAt off
               while (macroExpanded != null && !macroExpanded.isInstanceOf[NavigatablePsiElement])
                 macroExpanded = macroExpanded.getParent
 
