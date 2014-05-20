@@ -15,12 +15,15 @@ import com.intellij.openapi.keymap.{KeymapUtil, KeymapManager}
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.{PsiDocumentManager, PsiFile}
+import com.intellij.psi.{PsiFileFactory, PsiDocumentManager, PsiFile}
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.impl.DefaultJavaProgramRunner
 import org.jetbrains.plugins.scala.worksheet.processor.WorksheetCompiler
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
 import org.jetbrains.plugins.scala
+import com.intellij.openapi.editor.{Document, EditorFactory, Editor}
+import com.intellij.lang.{StdLanguages, Language}
+import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
 
 /**
  * @author Ksenia.Sautina
@@ -29,13 +32,22 @@ import org.jetbrains.plugins.scala
  */
 
 class RunWorksheetAction extends AnAction with TopComponentAction {
+  def createBlankEditor(project: Project, defaultText: String = "", lang: Language = StdLanguages.TEXT): Editor = {
+    val editor = EditorFactory.getInstance.createViewer(PsiDocumentManager.getInstance(project).getDocument(
+      PsiFileFactory.getInstance(project).createFileFromText("dummy", lang, defaultText)), project)
+    editor setBorder null
+    editor
+  }
+
   def actionPerformed(e: AnActionEvent) {
     val editor = FileEditorManager.getInstance(e.getProject).getSelectedTextEditor
     if (editor == null) return
+
     val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
     psiFile match {
       case file: ScalaFile if file.isWorksheetFile =>
-        val viewer = WorksheetViewerInfo getViewer editor
+//        val viewer = WorksheetViewerInfo getViewer editor
+        val viewer = WorksheetEditorPrinter.createWorksheetViewer(editor, null)
         val project = e.getProject
 
         if (viewer != null) {
@@ -49,6 +61,17 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
           }, ModalityState.any())
         }
 
+        ApplicationManager.getApplication.runWriteAction(new Runnable {
+          override def run() {
+            val worksheetDocument: Document = viewer.getDocument
+//            worksheetDocument.setText("*** my test ***")
+            worksheetDocument.setText(editor.getDocument.getText)
+            PsiDocumentManager.getInstance(e.getProject).commitDocument(worksheetDocument)
+          }
+        })
+
+//        return
+        // no compilation
 
         new WorksheetCompiler().compileAndRun(editor, file, (className: String, addToCp: String) => {
           ApplicationManager.getApplication invokeLater new Runnable {
@@ -67,7 +90,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
     val settings = runManagerEx.getConfigurationSettings(configurationType)
 
     def execute(setting: RunnerAndConfigurationSettings) {
-      val configuration = setting.getConfiguration.asInstanceOf[WorksheetRunConfiguration]
+      val configuration: WorksheetRunConfiguration = setting.getConfiguration.asInstanceOf[WorksheetRunConfiguration]
       configuration.worksheetField = virtualFile.getCanonicalPath
       configuration.classToRunField = mainClassName
       configuration.addCpField = addToCp
@@ -76,13 +99,13 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
       val runExecutor = DefaultRunExecutor.getRunExecutorInstance
       val runner: DefaultJavaProgramRunner = new DefaultJavaProgramRunner {
         override protected def doExecute(project: Project, state: RunProfileState,
-                               contentToReuse: RunContentDescriptor, env: ExecutionEnvironment): RunContentDescriptor = {
+                                         contentToReuse: RunContentDescriptor, env: ExecutionEnvironment): RunContentDescriptor = {
           val descriptor = super.doExecute(project, state, contentToReuse, env)
           descriptor.setActivateToolWindowWhenAdded(false)
           descriptor
         }
       }
-      
+
       if (runner != null) {
         try {
           val builder: ExecutionEnvironmentBuilder = new ExecutionEnvironmentBuilder(project, runExecutor)
