@@ -70,7 +70,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
           }
         })
 
-//        return
+        return
         // no compilation
 
         new WorksheetCompiler().compileAndRun(editor, file, (className: String, addToCp: String) => {
