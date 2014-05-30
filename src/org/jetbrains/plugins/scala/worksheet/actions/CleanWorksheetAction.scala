@@ -74,7 +74,7 @@ class CleanWorksheetAction() extends AnAction with TopComponentAction {
       val editor = FileEditorManager.getInstance(e.getProject).getSelectedTextEditor
       val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
       psiFile match {
-        case sf: ScalaFile if sf.isWorksheetFile => enable()
+        case sf: ScalaFile => enable()
         case _ => disable()
       }
     } catch {

@@ -9,7 +9,7 @@ import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.runners.{ExecutionEnvironmentBuilder, ExecutionEnvironment}
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.ActionRunner
-import org.jetbrains.plugins.scala.worksheet.runconfiguration.{WorksheetViewerInfo, WorksheetRunConfigurationFactory, WorksheetRunConfiguration, WorksheetConfigurationType}
+import org.jetbrains.plugins.scala.worksheet.runconfiguration.{WorksheetRunConfigurationFactory, WorksheetRunConfiguration, WorksheetConfigurationType}
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.keymap.{KeymapUtil, KeymapManager}
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -18,12 +18,12 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.{PsiFileFactory, PsiDocumentManager, PsiFile}
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.impl.DefaultJavaProgramRunner
-import org.jetbrains.plugins.scala.worksheet.processor.WorksheetCompiler
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
-import org.jetbrains.plugins.scala
-import com.intellij.openapi.editor.{Document, EditorFactory, Editor}
+import com.intellij.openapi.editor.{ScrollingModel, Document, EditorFactory, Editor}
 import com.intellij.lang.{StdLanguages, Language}
 import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
+import javax.swing.DefaultBoundedRangeModel
+import com.intellij.openapi.editor.impl.EditorImpl
 
 /**
  * @author Ksenia.Sautina
@@ -45,15 +45,17 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
 
     val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
     psiFile match {
-      case file: ScalaFile if file.isWorksheetFile =>
-//        val viewer = WorksheetViewerInfo getViewer editor
-        val viewer = WorksheetEditorPrinter.createWorksheetViewer(editor, null)
+      case file: ScalaFile =>
+        //        val viewer = WorksheetViewerInfo getViewer editor
+        val viewer = WorksheetEditorPrinter.createWorksheetViewer(editor, null, true)
+        viewer.getDocument
+
         val project = e.getProject
 
         if (viewer != null) {
           ApplicationManager.getApplication.invokeAndWait(new Runnable {
             override def run() {
-              scala.extensions.inWriteAction {
+              extensions.inWriteAction {
                 CleanWorksheetAction.resetScrollModel(viewer)
                 CleanWorksheetAction.cleanWorksheet(file.getNode, editor, viewer, project)
               }
@@ -61,25 +63,23 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
           }, ModalityState.any())
         }
 
-        ApplicationManager.getApplication.runWriteAction(new Runnable {
-          override def run() {
-            val worksheetDocument: Document = viewer.getDocument
-//            worksheetDocument.setText("*** my test ***")
-            worksheetDocument.setText(editor.getDocument.getText)
-            PsiDocumentManager.getInstance(e.getProject).commitDocument(worksheetDocument)
-          }
-        })
+        extensions.inWriteAction {
+          val worksheetDocument: Document = viewer.getDocument
+          worksheetDocument.setText(editor.getDocument.getText)
+          PsiDocumentManager.getInstance(e.getProject).commitDocument(worksheetDocument)
 
-        return
-        // no compilation
-
-        new WorksheetCompiler().compileAndRun(editor, file, (className: String, addToCp: String) => {
-          ApplicationManager.getApplication invokeLater new Runnable {
-            override def run() {
-              executeWorksheet(file.getName, project, file.getContainingFile.getVirtualFile, className, addToCp)
-            }
+          (editor, viewer) match {
+            case (editorEx: EditorImpl, viewerEx: EditorImpl) =>
+              val commonModel = editorEx.getScrollPane.getVerticalScrollBar.getModel
+              viewerEx.getScrollPane.getVerticalScrollBar.setModel(
+                new DefaultBoundedRangeModel(
+                  commonModel.getValue, commonModel.getExtent, commonModel.getMinimum, commonModel.getMaximum
+                )
+              )
+            case _ =>
           }
-        }, Option(editor))
+        }
+
       case _ =>
     }
   }
@@ -162,7 +162,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
       val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
 
       psiFile match {
-        case sf: ScalaFile if sf.isWorksheetFile => enable()
+        case sf: ScalaFile => enable()
         case _ =>  disable()
       }
     } catch {
