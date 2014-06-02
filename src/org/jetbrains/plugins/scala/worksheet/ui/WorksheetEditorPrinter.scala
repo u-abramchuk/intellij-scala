@@ -1,6 +1,7 @@
 package org.jetbrains.plugins.scala
 package worksheet.ui
 
+import _root_.scala.Some
 import _root_.scala.util.Random
 import com.intellij.openapi.editor.{LogicalPosition, Document, EditorFactory, Editor}
 import com.intellij.openapi.vfs.VirtualFile
@@ -8,13 +9,13 @@ import com.intellij.ui.JBSplitter
 import java.awt.{BorderLayout, Dimension}
 import org.jetbrains.plugins.scala.worksheet.runconfiguration.WorksheetViewerInfo
 import com.intellij.openapi.editor.impl.EditorImpl
-import com.intellij.openapi.editor.ex.EditorGutterComponentEx
+import com.intellij.openapi.editor.ex.{EditorEx, EditorGutterComponentEx}
 import com.intellij.openapi.application.ApplicationManager
 import javax.swing.{Timer, JComponent, JLayeredPane}
 import com.intellij.openapi.project.Project
 import org.jetbrains.plugins.scala.worksheet.processor.WorksheetSourceProcessor
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.psi.{PsiFileFactory, PsiWhiteSpace, PsiManager, PsiDocumentManager}
+import com.intellij.psi._
 import org.jetbrains.plugins.scala.extensions
 import org.jetbrains.plugins.scala.settings.ScalaProjectSettings
 import java.awt.event.{ActionEvent, ActionListener}
@@ -26,6 +27,7 @@ import com.intellij.openapi.editor.event.{CaretEvent, CaretListener}
 import java.util
 import com.intellij.lang.{Language, StdLanguages}
 import com.intellij.lang.java.JavaLanguage
+import com.intellij.openapi.editor.highlighter.{EditorHighlighter, EditorHighlighterFactory}
 
 /**
  * User: Dmitry Naydanov
@@ -294,7 +296,7 @@ object WorksheetEditorPrinter {
 
     val worksheetViewer = WorksheetViewerInfo getViewer editor match {
       case editorImpl: EditorImpl => editorImpl
-      case _ => createBlankEditor(project).asInstanceOf[EditorImpl]
+      case _ => createBlankScalaEditor(project).asInstanceOf[EditorImpl]
     }
 
     worksheetViewer.getComponent setPreferredSize prefDim
@@ -343,12 +345,25 @@ object WorksheetEditorPrinter {
     editor
   }
 
-  private def createBlankEditor(project: Project, lang: Language = StdLanguages.TEXT, defaultText: String = ""): Editor = {
-    val factory: EditorFactory = EditorFactory.getInstance
-    val file = PsiFileFactory.getInstance(project).createFileFromText("dummy_" + Random.nextString(10), lang, defaultText)
+  private def createBlankScalaEditor(project: Project): Editor = {
+    val file: PsiFile = PsiFileFactory.getInstance(project)
+            .createFileFromText("dummy_" + Random.nextString(10), ScalaFileType.SCALA_LANGUAGE, "")
     val doc = PsiDocumentManager.getInstance(project).getDocument(file)
-    val editor: Editor = factory.createViewer(doc, project)
+    val factory: EditorFactory = EditorFactory.getInstance
+    val editor = factory.createViewer(doc, project)
+    val editorHighlighter = EditorHighlighterFactory.getInstance
+            .createEditorHighlighter(project, ScalaFileType.SCALA_FILE_TYPE)
+    editor.asInstanceOf[EditorEx].setHighlighter(editorHighlighter)
     editor setBorder null
     editor
   }
+
+  def getMacrosheetViewer(editor: Editor): Editor = {
+    if (WorksheetViewerInfo.getViewer(editor) == null) {
+      val project = editor.getProject
+      createBlankScalaEditor(project)
+    }
+    createWorksheetViewer(editor, null, true)
+  }
 }
+

@@ -46,8 +46,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
     val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
     psiFile match {
       case file: ScalaFile =>
-        //        val viewer = WorksheetViewerInfo getViewer editor
-        val viewer = WorksheetEditorPrinter.createWorksheetViewer(editor, null, true)
+        val viewer = WorksheetEditorPrinter.getMacrosheetViewer(editor)
         viewer.getDocument
 
         val project = e.getProject

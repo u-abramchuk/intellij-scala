@@ -16,6 +16,11 @@ import com.intellij.navigation.GotoRelatedItem
 import com.intellij.openapi.util.TextRange
 import collection.GenIterable
 import scala.Some
+import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.editor.Editor
+import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.plugins.scala.lang.psi.api.expr.{ScExpression, MethodInvocation}
 
 /**
  * User: Dmitry Naydanov
@@ -24,13 +29,13 @@ import scala.Some
 class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
   private val errorMessage = "Synthetic source isn't available"
 
-  def getLineMarkerInfo(element: PsiElement): LineMarkerInfo[_ <: PsiElement] = null 
+  def getLineMarkerInfo(element: PsiElement): LineMarkerInfo[_ <: PsiElement] = null
 
   def collectSlowLineMarkers(elements: util.List[PsiElement], result: util.Collection[LineMarkerInfo[_ <: PsiElement]]) {
-    if (!ScalaMacroDebuggingUtil.isEnabled || elements.isEmpty) return
+    if (elements.isEmpty) return
     val first = elements get 0
     val file = first.getContainingFile
-    
+
     val synFile = file match {
       case scalaFile: ScalaFile if ScalaMacroDebuggingUtil tryToLoad scalaFile => Some(scalaFile)
       case _ => None
@@ -39,14 +44,14 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
     import scala.collection.JavaConversions._
     val macrosFound = elements filter ScalaMacroDebuggingUtil.isMacroCall
     if (macrosFound.length == 0) return
-    
+
     val nullOffsets: GenIterable[(Int, Int, Int)]  = Stream.iterate((-1,-1,-1))((t) => (t._1,t._2,t._3))
     val offsets: GenIterable[(Int, Int, Int)] = synFile map (ScalaMacroDebuggingUtil getOffsets _) map {
       case Some(o) if o.length == macrosFound.length => o
-      case None => nullOffsets 
-    } getOrElse nullOffsets 
+      case None => nullOffsets
+    } getOrElse nullOffsets
 
-    
+
     (0 /: (macrosFound zip offsets)) {
       case (offsetsSoFar, (macroCall, (length, start, end))) =>
         val off = if (length <= 0) {
@@ -56,9 +61,9 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
             PsiDocumentManager getInstance file.getProject getDocument _ getLineNumber start
           } getOrElse 0 else 0)
         }
-        
+
         val markerInfo = new RelatedItemLineMarkerInfo[PsiElement](macroCall, macroCall.getTextRange, Icons.NO_SCALA_SDK,
-        Pass.UPDATE_OVERRIDEN_MARKERS, new Function[PsiElement, String] {
+          Pass.UPDATE_OVERRIDEN_MARKERS, new Function[PsiElement, String] {
             def fun(param: PsiElement): String = {
 
               if (off <= 0) {
@@ -72,22 +77,30 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
           },
           new GutterIconNavigationHandler[PsiElement] {
             def navigate(mouseEvent: MouseEvent, elt: PsiElement) {
-              if (off <= 0) return 
-              var macroExpanded = ScalaMacroDebuggingUtil loadCode file findElementAt off
-              while (macroExpanded != null && !macroExpanded.isInstanceOf[NavigatablePsiElement])
-                macroExpanded = macroExpanded.getParent
+              println("* * * elt: " + elt)
+              val project = elt.getProject
+              val editor = FileEditorManager.getInstance(project).getSelectedTextEditor
+              val macrosheet: Editor = WorksheetEditorPrinter.getMacrosheetViewer(editor)
+              val macrosheetFile = PsiDocumentManager.getInstance(project).getPsiFile(macrosheet.getDocument)
 
-              if (macroExpanded == null) return
-              
-              PsiElementListNavigator.openTargets(mouseEvent,
-                Array[NavigatablePsiElement](macroExpanded.asInstanceOf[NavigatablePsiElement]),
-                "GoTo Expanded", "GoTo Expanded" /* todo: please review */, new GotoFileCellRenderer(5))
+              var macroCall = macrosheetFile.findElementAt(elt.getTextOffset)
+              println("* macroCall: " + macroCall)
+              while (macroCall!= null && !ScalaMacroDebuggingUtil.isMacroCall(macroCall)) {
+                macroCall = macroCall.getParent
+                println("* macroCall: " + macroCall)
+              }
+              if (macroCall != null) {
+                extensions.inWriteAction {
+                  println("* deleted: " + macroCall)
+                  macroCall.delete()
+                }
+              }
             }
           }, GutterIconRenderer.Alignment.RIGHT, util.Arrays.asList[GotoRelatedItem]())
 
         result add markerInfo
 
         offsetsSoFar + length - (end - start)
-    } 
+    }
   }
 }
