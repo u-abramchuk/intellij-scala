@@ -43,29 +43,29 @@ class WorksheetFileHook(private val project: Project) extends ProjectComponent {
   override def getComponentName: String = "Clean worksheet on editor close"
 
   def initActions(file: VirtualFile, run: Boolean, exec: Option[WorksheetProcess] = None) {
-    //    scala.extensions.inReadAction {
-    if (project.isDisposed) return
+//    scala.extensions.inReadAction {
+      if (project.isDisposed) return
 
-    val myFileEditorManager = FileEditorManager.getInstance(project)
-    val editors = myFileEditorManager.getAllEditors(file)
+      val myFileEditorManager = FileEditorManager.getInstance(project)
+      val editors = myFileEditorManager.getAllEditors(file)
 
-    for (editor <- editors) {
-      WorksheetFileHook.getAndRemovePanel(file) map {
-        case ref =>
-          val p = ref.get()
-          if (p != null) myFileEditorManager.removeTopComponent(editor, p)
+      for (editor <- editors) {
+        WorksheetFileHook.getAndRemovePanel(file) map {
+          case ref => 
+            val p = ref.get()
+            if (p != null) myFileEditorManager.removeTopComponent(editor, p)
+        }
+        val panel = new WorksheetFileHook.MyPanel(file)
+        
+        panel.setLayout(new FlowLayout(FlowLayout.LEFT))
+
+        if (run) new RunWorksheetAction().init(panel) else exec map (new StopWorksheetAction(_).init(panel))
+        new CleanWorksheetAction().init(panel)
+        new CopyWorksheetAction().init(panel)
+
+        myFileEditorManager.addTopComponent(editor, panel)
       }
-      val panel = new WorksheetFileHook.MyPanel(file)
-
-      panel.setLayout(new FlowLayout(FlowLayout.LEFT))
-
-      if (run) new RunWorksheetAction().init(panel) else exec map (new StopWorksheetAction(_).init(panel))
-      new CleanWorksheetAction().init(panel)
-      new CopyWorksheetAction().init(panel)
-
-      myFileEditorManager.addTopComponent(editor, panel)
-    }
-    //    }
+//    }
   }
 
   private object WorksheetEditorListener extends FileEditorManagerListener {
@@ -75,11 +75,11 @@ class WorksheetFileHook(private val project: Project) extends ProjectComponent {
 
     override def fileOpened(source: FileEditorManager, file: VirtualFile) {
       if (ScalaFileType.WORKSHEET_EXTENSION != file.getExtension) return
-
+      
       WorksheetFileHook.this.initActions(file, true)
       loadEvaluationResult(source, file)
     }
-
+    
     private def loadEvaluationResult(source: FileEditorManager, file: VirtualFile) {
       source getSelectedEditor file match {
         case txt: TextEditor => txt.getEditor match {
@@ -104,23 +104,23 @@ class WorksheetFileHook(private val project: Project) extends ProjectComponent {
         case _ =>
       }
     }
-
+    
   }
 }
 
 object WorksheetFileHook {
   private val file2panel = new util.WeakHashMap[VirtualFile, WeakReference[MyPanel]]()
-
+  
   class MyPanel(file: VirtualFile) extends JPanel {
-
+    
     file2panel.put(file, new WeakReference[MyPanel](this))
-
+    
     override def equals(obj: Any) = obj.isInstanceOf[MyPanel]
 
     override def hashCode() = Integer.MAX_VALUE
   }
-
+  
   def getAndRemovePanel(file: VirtualFile): Option[WeakReference[MyPanel]] = Option(file2panel.remove(file))
-
+  
   def instance(project: Project) = ServiceManager.getService(project, classOf[WorksheetFileHook])
 }

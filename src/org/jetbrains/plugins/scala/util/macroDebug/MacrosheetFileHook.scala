@@ -13,7 +13,7 @@ import org.jetbrains.plugins.scala.components.{StopWorksheetAction, WorksheetPro
 import java.awt.FlowLayout
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
 import org.jetbrains.plugins.scala.worksheet.runconfiguration.WorksheetViewerInfo
-import org.jetbrains.plugins.scala.worksheet.actions.{WorksheetFileHook, CleanWorksheetAction}
+import org.jetbrains.plugins.scala.worksheet.actions.WorksheetFileHook
 
 /**
  * Created by ibogomolov on 28.05.14.
@@ -56,7 +56,7 @@ class MacrosheetFileHook(private val project: Project) extends ProjectComponent{
       panel.setLayout(new FlowLayout(FlowLayout.LEFT))
 
       if (run) new RunMacrosheetAction().init(panel) else exec map (new StopWorksheetAction(_).init(panel))
-      new CleanWorksheetAction().init(panel)
+      new CleanMacrosheetAction().init(panel)
 
       myFileEditorManager.addTopComponent(editor, panel)
     }
@@ -85,7 +85,7 @@ class MacrosheetFileHook(private val project: Project) extends ProjectComponent{
             PsiDocumentManager getInstance project getPsiFile ext.getDocument match{
               case scalaFile:ScalaFile=>MacrosheetEditorPrinter.loadWorksheetEvaluation(scalaFile)foreach{
                 case result if!result.isEmpty=>
-                  val viewer=MacrosheetEditorPrinter.createMacrosheetViewer(ext,file,true)
+                  val viewer=MacrosheetEditorPrinter.createMacrosheetViewer(ext,file)
                   val document=viewer.getDocument
 
                   extensions.inWriteAction{

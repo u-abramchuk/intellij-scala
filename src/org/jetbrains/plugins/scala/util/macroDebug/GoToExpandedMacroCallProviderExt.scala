@@ -80,7 +80,7 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
               println("* * * elt: " + elt)
               val project = elt.getProject
               val editor = FileEditorManager.getInstance(project).getSelectedTextEditor
-              val macrosheet: Editor = WorksheetEditorPrinter.getMacrosheetViewer(editor)
+              val macrosheet: Editor = MacrosheetEditorPrinter.createMacrosheetViewer(editor, null)
               val macrosheetFile = PsiDocumentManager.getInstance(project).getPsiFile(macrosheet.getDocument)
 
               var macroCall = macrosheetFile.findElementAt(elt.getTextOffset)

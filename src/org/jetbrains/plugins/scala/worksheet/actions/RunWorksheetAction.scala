@@ -9,21 +9,18 @@ import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.runners.{ExecutionEnvironmentBuilder, ExecutionEnvironment}
 import com.intellij.openapi.ui.Messages
 import com.intellij.util.ActionRunner
-import org.jetbrains.plugins.scala.worksheet.runconfiguration.{WorksheetRunConfigurationFactory, WorksheetRunConfiguration, WorksheetConfigurationType}
+import org.jetbrains.plugins.scala.worksheet.runconfiguration.{WorksheetViewerInfo, WorksheetRunConfigurationFactory, WorksheetRunConfiguration, WorksheetConfigurationType}
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.keymap.{KeymapUtil, KeymapManager}
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.{PsiFileFactory, PsiDocumentManager, PsiFile}
+import com.intellij.psi.{PsiDocumentManager, PsiFile}
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.execution.impl.DefaultJavaProgramRunner
+import org.jetbrains.plugins.scala.worksheet.processor.WorksheetCompiler
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
-import com.intellij.openapi.editor.{ScrollingModel, Document, EditorFactory, Editor}
-import com.intellij.lang.{StdLanguages, Language}
-import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
-import javax.swing.DefaultBoundedRangeModel
-import com.intellij.openapi.editor.impl.EditorImpl
+import org.jetbrains.plugins.scala
 
 /**
  * @author Ksenia.Sautina
@@ -32,29 +29,19 @@ import com.intellij.openapi.editor.impl.EditorImpl
  */
 
 class RunWorksheetAction extends AnAction with TopComponentAction {
-  def createBlankEditor(project: Project, defaultText: String = "", lang: Language = StdLanguages.TEXT): Editor = {
-    val editor = EditorFactory.getInstance.createViewer(PsiDocumentManager.getInstance(project).getDocument(
-      PsiFileFactory.getInstance(project).createFileFromText("dummy", lang, defaultText)), project)
-    editor setBorder null
-    editor
-  }
-
   def actionPerformed(e: AnActionEvent) {
     val editor = FileEditorManager.getInstance(e.getProject).getSelectedTextEditor
     if (editor == null) return
-
     val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
     psiFile match {
-      case file: ScalaFile =>
-        val viewer = WorksheetEditorPrinter.getMacrosheetViewer(editor)
-        viewer.getDocument
-
+      case file: ScalaFile if file.isWorksheetFile =>
+        val viewer = WorksheetViewerInfo getViewer editor
         val project = e.getProject
 
         if (viewer != null) {
           ApplicationManager.getApplication.invokeAndWait(new Runnable {
             override def run() {
-              extensions.inWriteAction {
+              scala.extensions.inWriteAction {
                 CleanWorksheetAction.resetScrollModel(viewer)
                 CleanWorksheetAction.cleanWorksheet(file.getNode, editor, viewer, project)
               }
@@ -62,23 +49,14 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
           }, ModalityState.any())
         }
 
-        extensions.inWriteAction {
-          val worksheetDocument: Document = viewer.getDocument
-          worksheetDocument.setText(editor.getDocument.getText)
-          PsiDocumentManager.getInstance(e.getProject).commitDocument(worksheetDocument)
 
-          (editor, viewer) match {
-            case (editorEx: EditorImpl, viewerEx: EditorImpl) =>
-              val commonModel = editorEx.getScrollPane.getVerticalScrollBar.getModel
-              viewerEx.getScrollPane.getVerticalScrollBar.setModel(
-                new DefaultBoundedRangeModel(
-                  commonModel.getValue, commonModel.getExtent, commonModel.getMinimum, commonModel.getMaximum
-                )
-              )
-            case _ =>
+        new WorksheetCompiler().compileAndRun(editor, file, (className: String, addToCp: String) => {
+          ApplicationManager.getApplication invokeLater new Runnable {
+            override def run() {
+              executeWorksheet(file.getName, project, file.getContainingFile.getVirtualFile, className, addToCp)
+            }
           }
-        }
-
+        }, Option(editor))
       case _ =>
     }
   }
@@ -89,7 +67,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
     val settings = runManagerEx.getConfigurationSettings(configurationType)
 
     def execute(setting: RunnerAndConfigurationSettings) {
-      val configuration: WorksheetRunConfiguration = setting.getConfiguration.asInstanceOf[WorksheetRunConfiguration]
+      val configuration = setting.getConfiguration.asInstanceOf[WorksheetRunConfiguration]
       configuration.worksheetField = virtualFile.getCanonicalPath
       configuration.classToRunField = mainClassName
       configuration.addCpField = addToCp
@@ -98,13 +76,13 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
       val runExecutor = DefaultRunExecutor.getRunExecutorInstance
       val runner: DefaultJavaProgramRunner = new DefaultJavaProgramRunner {
         override protected def doExecute(project: Project, state: RunProfileState,
-                                         contentToReuse: RunContentDescriptor, env: ExecutionEnvironment): RunContentDescriptor = {
+                               contentToReuse: RunContentDescriptor, env: ExecutionEnvironment): RunContentDescriptor = {
           val descriptor = super.doExecute(project, state, contentToReuse, env)
           descriptor.setActivateToolWindowWhenAdded(false)
           descriptor
         }
       }
-
+      
       if (runner != null) {
         try {
           val builder: ExecutionEnvironmentBuilder = new ExecutionEnvironmentBuilder(project, runExecutor)
@@ -161,7 +139,7 @@ class RunWorksheetAction extends AnAction with TopComponentAction {
       val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
 
       psiFile match {
-        case sf: ScalaFile => enable()
+        case sf: ScalaFile if sf.isWorksheetFile => enable()
         case _ =>  disable()
       }
     } catch {

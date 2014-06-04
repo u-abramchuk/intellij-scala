@@ -21,10 +21,9 @@ import com.intellij.execution.impl.DefaultJavaProgramRunner
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
 import com.intellij.openapi.editor.{Document, EditorFactory, Editor}
 import com.intellij.lang.{StdLanguages, Language}
-import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
 import javax.swing.DefaultBoundedRangeModel
 import com.intellij.openapi.editor.impl.EditorImpl
-import org.jetbrains.plugins.scala.worksheet.actions.{CleanWorksheetAction, TopComponentAction}
+import org.jetbrains.plugins.scala.worksheet.actions.TopComponentAction
 
 /**
  * @author Ksenia.Sautina
@@ -47,7 +46,7 @@ class RunMacrosheetAction extends AnAction with TopComponentAction {
     val psiFile: PsiFile = PsiDocumentManager.getInstance(e.getProject).getPsiFile(editor.getDocument)
     psiFile match {
       case file: ScalaFile =>
-        val viewer = WorksheetEditorPrinter.getMacrosheetViewer(editor)
+        val viewer = MacrosheetEditorPrinter.createMacrosheetViewer(editor, null)
         viewer.getDocument
 
         val project = e.getProject
