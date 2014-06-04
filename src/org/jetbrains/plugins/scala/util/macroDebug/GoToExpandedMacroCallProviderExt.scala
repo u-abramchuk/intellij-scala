@@ -32,7 +32,7 @@ class GoToExpandedMacroCallProviderExt extends LineMarkerProvider {
   def getLineMarkerInfo(element: PsiElement): LineMarkerInfo[_ <: PsiElement] = null
 
   def collectSlowLineMarkers(elements: util.List[PsiElement], result: util.Collection[LineMarkerInfo[_ <: PsiElement]]) {
-    if (elements.isEmpty) return
+    if (!ScalaMacroDebuggingUtil.isEnabled || elements.isEmpty) return
     val first = elements get 0
     val file = first.getContainingFile
 

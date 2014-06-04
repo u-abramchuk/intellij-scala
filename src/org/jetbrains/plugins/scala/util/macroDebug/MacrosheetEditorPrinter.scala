@@ -1,5 +1,5 @@
 package org.jetbrains.plugins.scala
-package worksheet.ui
+package util.macroDebug
 
 import _root_.scala.Some
 import _root_.scala.util.Random
@@ -7,12 +7,9 @@ import com.intellij.openapi.editor.{LogicalPosition, Document, EditorFactory, Ed
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.JBSplitter
 import java.awt.{BorderLayout, Dimension}
-import org.jetbrains.plugins.scala.worksheet.runconfiguration.WorksheetViewerInfo
 import com.intellij.openapi.editor.impl.EditorImpl
 import com.intellij.openapi.editor.ex.{EditorEx, EditorGutterComponentEx}
-import com.intellij.openapi.application.ApplicationManager
-import javax.swing.{Timer, JComponent, JLayeredPane}
-import com.intellij.openapi.project.Project
+import javax.swing.{JComponent, Timer, JLayeredPane}
 import org.jetbrains.plugins.scala.worksheet.processor.WorksheetSourceProcessor
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi._
@@ -25,17 +22,21 @@ import org.jetbrains.plugins.scala.lang.psi.api.ScalaFile
 import org.jetbrains.plugins.scala
 import com.intellij.openapi.editor.event.{CaretEvent, CaretListener}
 import java.util
+import com.intellij.lang.Language
 import com.intellij.openapi.editor.highlighter.EditorHighlighterFactory
+import com.intellij.openapi.application.ApplicationManager
+import org.jetbrains.plugins.scala.worksheet.runconfiguration.WorksheetViewerInfo
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.fileTypes.LanguageFileType
 
 /**
- * User: Dmitry Naydanov
- * Date: 1/20/14
+ *  Sheet implementation for macro debugging based on Scala worksheet
  */
-class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, file: ScalaFile) {
+class MacrosheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, file: ScalaFile) {
   private val project = originalEditor.getProject
   private val originalDocument = originalEditor.getDocument
   private val viewerDocument = worksheetViewer.getDocument
-  private val timer = new Timer(WorksheetEditorPrinter.IDLE_TIME_MLS, TimerListener)
+  private val timer = new Timer(MacrosheetEditorPrinter.IDLE_TIME_MLS, TimerListener)
 
   private val outputBuffer = new StringBuilder
   private var linesCount = 0
@@ -105,7 +106,7 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
           }
 
           buffed += linesCount
-          if (buffed > WorksheetEditorPrinter.BULK_COUNT) midFlush()
+          if (buffed > MacrosheetEditorPrinter.BULK_COUNT) midFlush()
           clear()
         case _ =>
       }
@@ -115,7 +116,7 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
       totalCount += 1
 
       if (linesCount > getOutputLimit) {
-        outputBuffer append WorksheetEditorPrinter.END_MESSAGE
+        outputBuffer append MacrosheetEditorPrinter.END_MESSAGE
         cutoffPrinted = true
       } else outputBuffer append line
     }
@@ -126,7 +127,7 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
   private def init(): Option[Int] = {
     inited = true
 
-    WorksheetEditorPrinter.synch(originalEditor, worksheetViewer)
+    MacrosheetEditorPrinter.synch(originalEditor, worksheetViewer)
 
     if (file != null) {
       var s = file.getFirstChild
@@ -160,7 +161,7 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
 
     scala.extensions.inReadAction {
       PsiDocumentManager.getInstance(project).getPsiFile(originalEditor.getDocument) match {
-        case scalaFile: ScalaFile => WorksheetEditorPrinter.saveWorksheetEvaluation(scalaFile, str)
+        case scalaFile: ScalaFile => MacrosheetEditorPrinter.saveWorksheetEvaluation(scalaFile, str)
         case _ =>
       }
     }
@@ -177,7 +178,8 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
 
   def getCurrentText = prefix + outputBuffer.toString()
 
-  private def updateWithPersistentScroll(document: Document, text: String) {//todo - to do
+  private def updateWithPersistentScroll(document: Document, text: String) {
+    //todo - to do
     extensions.invokeLater {
       extensions.inWriteAction {
         val scroll = originalEditor.getScrollingModel.getVerticalScrollOffset
@@ -206,9 +208,10 @@ class WorksheetEditorPrinter(originalEditor: Editor, worksheetViewer: Editor, fi
       midFlush()
     }
   }
+
 }
 
-object WorksheetEditorPrinter {
+object MacrosheetEditorPrinter {
   val END_MESSAGE = "Output exceeds cutoff limit.\n"
   val BULK_COUNT = 15
   val IDLE_TIME_MLS = 1000
@@ -219,7 +222,7 @@ object WorksheetEditorPrinter {
 
   def getPatched = patched
 
-  private def synch(originalEditor: Editor, worksheetViewer: Editor) {
+  def synch(originalEditor: Editor, worksheetViewer: Editor) {
     def createListener(recipient: Editor) = new CaretListener {
       override def caretAdded(e: CaretEvent) {}
 
@@ -272,14 +275,14 @@ object WorksheetEditorPrinter {
   }
 
   def newWorksheetUiFor(editor: Editor, virtualFile: VirtualFile) =
-    new WorksheetEditorPrinter(editor,  createWorksheetViewer(editor, virtualFile),
+    new MacrosheetEditorPrinter(editor,  createMacrosheetViewer(editor, virtualFile),
       PsiManager getInstance editor.getProject findFile virtualFile match {
         case scalaFile: ScalaFile => scalaFile
         case _ => null
       }
     )
 
-  def createWorksheetViewer(editor: Editor, virtualFile: VirtualFile, modelSync: Boolean = false): Editor = {
+  def createMacrosheetViewer(editor: Editor, virtualFile: VirtualFile, modelSync: Boolean = false): Editor = {
     val editorComponent = editor.getComponent
     val project = editor.getProject
 
@@ -294,7 +297,8 @@ object WorksheetEditorPrinter {
 
     val worksheetViewer = WorksheetViewerInfo getViewer editor match {
       case editorImpl: EditorImpl => editorImpl
-      case _ => createBlankScalaEditor(project).asInstanceOf[EditorImpl]
+      case _ => createBlankEditorWithLang(project, ScalaFileType.SCALA_LANGUAGE, ScalaFileType.SCALA_FILE_TYPE)
+              .asInstanceOf[EditorImpl]
     }
 
     worksheetViewer.getComponent setPreferredSize prefDim
@@ -336,21 +340,14 @@ object WorksheetEditorPrinter {
     worksheetViewer
   }
 
-  private def createBlankEditor(project: Project): Editor = {
-    val factory: EditorFactory = EditorFactory.getInstance
-    val editor: Editor = factory.createViewer(factory createDocument "", project)
-    editor setBorder null
-    editor
-  }
-
-  private def createBlankScalaEditor(project: Project): Editor = {
+  private def createBlankEditorWithLang(project: Project, lang: Language, fileType: LanguageFileType): Editor = {
     val file: PsiFile = PsiFileFactory.getInstance(project)
-            .createFileFromText("dummy_" + Random.nextString(10), ScalaFileType.SCALA_LANGUAGE, "")
+            .createFileFromText("dummy_" + Random.nextString(10), lang, "")
     val doc = PsiDocumentManager.getInstance(project).getDocument(file)
     val factory: EditorFactory = EditorFactory.getInstance
     val editor = factory.createViewer(doc, project)
     val editorHighlighter = EditorHighlighterFactory.getInstance
-            .createEditorHighlighter(project, ScalaFileType.SCALA_FILE_TYPE)
+            .createEditorHighlighter(project, fileType)
     editor.asInstanceOf[EditorEx].setHighlighter(editorHighlighter)
     editor setBorder null
     editor
@@ -359,9 +356,13 @@ object WorksheetEditorPrinter {
   def getMacrosheetViewer(editor: Editor): Editor = {
     if (WorksheetViewerInfo.getViewer(editor) == null) {
       val project = editor.getProject
-      createBlankScalaEditor(project)
+      createBlankEditorWithLang(project, ScalaFileType.SCALA_LANGUAGE, ScalaFileType.SCALA_FILE_TYPE)
     }
-    createWorksheetViewer(editor, null, true)
+    createMacrosheetViewer(editor, null, true)
   }
 }
+
+
+
+
 

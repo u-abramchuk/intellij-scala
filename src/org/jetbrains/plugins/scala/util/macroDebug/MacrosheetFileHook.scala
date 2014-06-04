@@ -1,5 +1,5 @@
 package org.jetbrains.plugins.scala
-package worksheet.actions
+package util.macroDebug
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.components.ProjectComponent
@@ -8,13 +8,12 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.editor.ex.EditorEx
 import com.intellij.psi.PsiDocumentManager
 import org.jetbrains.plugins.scala.lang.psi.api.ScalaFile
-import org.jetbrains.plugins.scala.worksheet.ui.WorksheetEditorPrinter
 import org.jetbrains.plugins.scala.{ScalaFileType, extensions}
 import org.jetbrains.plugins.scala.components.{StopWorksheetAction, WorksheetProcess}
 import java.awt.FlowLayout
 import com.intellij.openapi.application.{ModalityState, ApplicationManager}
 import org.jetbrains.plugins.scala.worksheet.runconfiguration.WorksheetViewerInfo
-
+import org.jetbrains.plugins.scala.worksheet.actions.{WorksheetFileHook, CleanWorksheetAction}
 
 /**
  * Created by ibogomolov on 28.05.14.
@@ -56,9 +55,8 @@ class MacrosheetFileHook(private val project: Project) extends ProjectComponent{
 
       panel.setLayout(new FlowLayout(FlowLayout.LEFT))
 
-      if (run) new RunWorksheetAction().init(panel) else exec map (new StopWorksheetAction(_).init(panel))
+      if (run) new RunMacrosheetAction().init(panel) else exec map (new StopWorksheetAction(_).init(panel))
       new CleanWorksheetAction().init(panel)
-      //      new CopyWorksheetAction().init(panel)
 
       myFileEditorManager.addTopComponent(editor, panel)
     }
@@ -68,7 +66,7 @@ class MacrosheetFileHook(private val project: Project) extends ProjectComponent{
   private object MacrosheetEditorListener extends FileEditorManagerListener{
 
     override def fileOpened(source:FileEditorManager,file:VirtualFile) {
-      if (ScalaFileType.DEFAULT_EXTENSION != file.getExtension)
+      if (!ScalaMacroDebuggingUtil.isEnabled || ScalaFileType.DEFAULT_EXTENSION != file.getExtension)
         return
 
       MacrosheetFileHook.this.initActions(file,true)
@@ -85,9 +83,9 @@ class MacrosheetFileHook(private val project: Project) extends ProjectComponent{
           case ext:EditorEx=>
 
             PsiDocumentManager getInstance project getPsiFile ext.getDocument match{
-              case scalaFile:ScalaFile=>WorksheetEditorPrinter.loadWorksheetEvaluation(scalaFile)foreach{
+              case scalaFile:ScalaFile=>MacrosheetEditorPrinter.loadWorksheetEvaluation(scalaFile)foreach{
                 case result if!result.isEmpty=>
-                  val viewer=WorksheetEditorPrinter.createWorksheetViewer(ext,file,true)
+                  val viewer=MacrosheetEditorPrinter.createMacrosheetViewer(ext,file,true)
                   val document=viewer.getDocument
 
                   extensions.inWriteAction{
