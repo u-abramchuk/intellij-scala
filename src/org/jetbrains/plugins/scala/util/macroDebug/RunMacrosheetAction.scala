@@ -64,7 +64,7 @@ class RunMacrosheetAction extends AnAction with TopComponentAction {
 
         extensions.inWriteAction {
           val worksheetDocument: Document = viewer.getDocument
-          worksheetDocument.setText(editor.getDocument.getText)
+          worksheetDocument.setText(ScalaMacroDebuggingUtil.loadCode1(psiFile).getText)
           PsiDocumentManager.getInstance(e.getProject).commitDocument(worksheetDocument)
 
           (editor, viewer) match {

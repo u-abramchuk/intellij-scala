@@ -241,7 +241,7 @@ class ScalaPositionManager(debugProcess: DebugProcess) extends PositionManager {
           val vFile: VirtualFile = vDir.findChild(fileName)
           if (vFile != null) {
             val psiFile: PsiFile = PsiManager.getInstance(project).findFile(vFile)
-            val debugFile: PsiFile = ScalaMacroDebuggingUtil.loadCode(psiFile, force = false)
+            val debugFile: PsiFile = ScalaMacroDebuggingUtil.loadCode1(psiFile, force = false)
             if (debugFile != null) {
               result.set(debugFile)
               return false
